@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export async function GET(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("conversationId");
@@ -17,5 +18,9 @@ export async function GET(req: NextRequest) {
     .eq("conversation_id", id)
     .order("created_at", { ascending: true });
 
-  return NextResponse.json(data || []);
+  return NextResponse.json(data || [], {
+    headers: {
+      "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
+    },
+  });
 }

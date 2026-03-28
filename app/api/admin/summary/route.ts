@@ -1,9 +1,56 @@
 import { NextRequest, NextResponse } from "next/server";
+import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
+
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
+});
+
+const groq = new OpenAI({
+  baseURL: "https://api.groq.com/openai/v1",
+  apiKey: process.env.GROQ_API_KEY,
+});
+
+async function callLLM(
+  system: string,
+  messages: { role: "user" | "assistant"; content: string }[],
+  maxTokens = 200,
+  temperature = 0.3,
+) {
+  try {
+    const res = await anthropic.messages.create({
+      model: "claude-3-5-haiku-20241022",
+      max_tokens: maxTokens,
+      system,
+      messages,
+      temperature,
+    });
+
+    return res.content
+      .map((block) => (block.type === "text" ? block.text : ""))
+      .join("")
+      .trim();
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    console.warn("Anthropic unavailable, falling back to Groq:", message);
+
+    const res = await groq.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
+      messages: [
+        ...(system ? [{ role: "system" as const, content: system }] : []),
+        ...messages,
+      ],
+      temperature,
+      max_tokens: maxTokens,
+    });
+
+    return res.choices[0].message.content?.trim() ?? "";
+  }
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -18,11 +65,6 @@ export async function POST(req: NextRequest) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
     );
 
-    const groq = new OpenAI({
-      apiKey: process.env.GROQ_API_KEY,
-      baseURL: "https://api.groq.com/openai/v1",
-    });
-
     const { data: messages, error } = await supabase
       .from("messages")
       .select("role, content, created_at")
@@ -35,12 +77,13 @@ export async function POST(req: NextRequest) {
       .map((message) => `${message.role === "user" ? "Арендатор" : "Агент"}: ${message.content}`)
       .join("\n");
 
-    const response = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
-      messages: [
-        {
-          role: "user",
-          content: `Ты аналитик диалогов по аренде. Проанализируй диалог и верни ТОЛЬКО валидный JSON.
+    const raw =
+      (await callLLM(
+        "",
+        [
+          {
+            role: "user",
+            content: `Ты аналитик диалогов по аренде. Проанализируй диалог и верни ТОЛЬКО валидный JSON.
 ВАЖНО: не используй эмодзи в ответе. Только текст.
 
 ДИАЛОГ:
@@ -54,13 +97,11 @@ ${messagesText || "(пусто)"}
   "key_concern": "<главное возражение арендатора если было, иначе null>",
   "summary": "<1-2 предложения: кто, что хотел, чем закончилось>"
 }`,
-        },
-      ],
-      temperature: 0.3,
-      max_tokens: 200,
-    });
-
-    const raw = response.choices[0].message.content || "{}";
+          },
+        ],
+        200,
+        0.3,
+      )) || "{}";
     const cleaned = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
 
     try {

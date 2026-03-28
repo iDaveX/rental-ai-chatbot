@@ -5,6 +5,21 @@ import Link from "next/link";
 import { useState } from "react";
 import { LISTINGS } from "@/data/listings";
 
+const ROOM_FILTERS = [
+  { value: null, label: "Любые комнаты" },
+  { value: 0, label: "Студия" },
+  { value: 1, label: "1-комн." },
+  { value: 2, label: "2-комн." },
+  { value: 3, label: "3-комн." },
+] as const;
+
+const PRICE_FILTERS = [
+  { value: null, label: "Любая цена" },
+  { value: 50000, label: "до 50 000 ₽" },
+  { value: 70000, label: "до 70 000 ₽" },
+  { value: 100000, label: "до 100 000 ₽" },
+] as const;
+
 function badgeColor(badge?: string) {
   if (badge === "Топ") return "bg-[#FF6100]";
   if (badge === "Новинка") return "bg-[#0066FF]";
@@ -15,6 +30,7 @@ function badgeColor(badge?: string) {
 export default function Home() {
   const [roomFilter, setRoomFilter] = useState<number | null>(null);
   const [priceFilter, setPriceFilter] = useState<number | null>(null);
+  const hasActiveFilters = roomFilter !== null || priceFilter !== null;
 
   const filtered = LISTINGS.filter((l) => {
     if (roomFilter !== null && l.rooms !== roomFilter) return false;
@@ -54,33 +70,56 @@ export default function Home() {
             <span className="text-sm text-[#8C8C8C]">Квартиры в аренду · Москва</span>
           </div>
 
-          <div className="mt-2 flex gap-2 overflow-x-auto scrollbar-hide">
-            {[null, 0, 1, 2, 3].map((r) => (
+          <div className="mt-3 space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {ROOM_FILTERS.map((filter) => (
+                <button
+                  key={`room-${filter.label}`}
+                  onClick={() =>
+                    setRoomFilter((current) => (current === filter.value ? null : filter.value))
+                  }
+                  className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                    roomFilter === filter.value
+                      ? "border-[#0066FF] bg-[#0066FF] text-white"
+                      : "border-[#E0E0E0] bg-white text-[#262626]"
+                  }`}
+                >
+                  {filter.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {PRICE_FILTERS.map((filter) => (
+                <button
+                  key={`price-${filter.label}`}
+                  onClick={() =>
+                    setPriceFilter((current) =>
+                      current === filter.value ? null : filter.value,
+                    )
+                  }
+                  className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                    priceFilter === filter.value
+                      ? "border-[#0066FF] bg-[#0066FF] text-white"
+                      : "border-[#E0E0E0] bg-white text-[#262626]"
+                  }`}
+                >
+                  {filter.label}
+                </button>
+              ))}
+            </div>
+
+            {hasActiveFilters && (
               <button
-                key={r ?? "any"}
-                onClick={() => setRoomFilter(r)}
-                className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-sm transition-colors ${
-                  roomFilter === r
-                    ? "border-[#0066FF] bg-[#0066FF] text-white"
-                    : "border-[#E0E0E0] bg-white text-[#262626]"
-                }`}
+                onClick={() => {
+                  setRoomFilter(null);
+                  setPriceFilter(null);
+                }}
+                className="text-sm font-medium text-[#0066FF]"
               >
-                {r === null ? "Любые комнаты" : r === 0 ? "Студия" : `${r}-комн.`}
+                Сбросить фильтры
               </button>
-            ))}
-            {[null, 50000, 70000, 100000].map((p) => (
-              <button
-                key={p ?? "any-price"}
-                onClick={() => setPriceFilter(p)}
-                className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-sm transition-colors ${
-                  priceFilter === p
-                    ? "border-[#0066FF] bg-[#0066FF] text-white"
-                    : "border-[#E0E0E0] bg-white text-[#262626]"
-                }`}
-              >
-                {p === null ? "Любая цена" : `до ${(p / 1000).toFixed(0)} 000 ₽`}
-              </button>
-            ))}
+            )}
           </div>
         </div>
       </div>

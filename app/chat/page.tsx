@@ -49,10 +49,9 @@ function generateSessionId() {
 }
 
 export default function ChatPage() {
-  const [sessionId] = useState(() => generateSessionId());
+  const [sessionId, setSessionId] = useState(() => generateSessionId());
   const [messages, setMessages] = useState<Message[]>([]);
   const [deliveredIds, setDeliveredIds] = useState<Set<string>>(new Set());
-  const [toast, setToast] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -60,15 +59,11 @@ export default function ChatPage() {
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [isDemoMode, setIsDemoMode] = useState(false);
   const [listingId, setListingId] = useState("usacheva-11");
+  const [historySessionId, setHistorySessionId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const listing = LISTINGS.find((l) => l.id === listingId) || LISTINGS[0];
-
-  const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 2500);
-  };
 
   const initialMessage = useMemo<Message>(
     () => ({
@@ -83,8 +78,11 @@ export default function ChatPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const id = params.get("listing") || "usacheva-11";
+    const sessionFromQuery = params.get("session");
     setListingId(id);
     setIsDemoMode(params.get("demo") === "true");
+    setHistorySessionId(sessionFromQuery);
+    setSessionId(sessionFromQuery || generateSessionId());
   }, []);
 
   useEffect(() => {
@@ -92,6 +90,46 @@ export default function ChatPage() {
     setDeliveredIds(new Set());
     setStage("greeting");
     setShowSuggestions(true);
+
+    if (historySessionId) {
+      void (async () => {
+        try {
+          const response = await fetch(
+            `/api/chat/history?sessionId=${encodeURIComponent(historySessionId)}&ts=${Date.now()}`,
+            { cache: "no-store" },
+          );
+          const data = await response.json();
+
+          if (!response.ok) {
+            throw new Error(data.error || "Failed to load chat history");
+          }
+
+          if (data.listingSlug) {
+            setListingId(data.listingSlug);
+          }
+          if (data.stage) {
+            setStage(data.stage as Stage);
+          }
+
+          const restoredMessages: Message[] = (data.messages ?? []).map(
+            (message: { id?: string; role: "user" | "assistant"; content: string; created_at: string }) => ({
+              id: message.id ?? crypto.randomUUID(),
+              role: message.role,
+              content: message.content,
+              timestamp: new Date(message.created_at),
+            }),
+          );
+
+          setMessages(restoredMessages.length > 0 ? restoredMessages : [initialMessage]);
+          setShowSuggestions(restoredMessages.length === 0);
+        } catch (error) {
+          console.error("Failed to load chat history", error);
+          setMessages([initialMessage]);
+        }
+      })();
+
+      return;
+    }
 
     const timer = setTimeout(() => {
       setIsTyping(true);
@@ -102,7 +140,7 @@ export default function ChatPage() {
     }, 800);
 
     return () => clearTimeout(timer);
-  }, [initialMessage]);
+  }, [historySessionId, initialMessage]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -216,23 +254,6 @@ export default function ChatPage() {
               <span>на сайте</span>
             </div>
           </div>
-          <button
-            onClick={() => showToast("Настройки чата — скоро")}
-            className="flex h-10 w-10 flex-shrink-0 items-center justify-center p-2 text-[#8C8C8C]"
-          >
-            <svg
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <circle cx="12" cy="5" r="1" />
-              <circle cx="12" cy="12" r="1" />
-              <circle cx="12" cy="19" r="1" />
-            </svg>
-          </button>
         </div>
       </div>
 
@@ -384,21 +405,6 @@ export default function ChatPage() {
         style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}
       >
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => showToast("Прикрепление файлов — скоро")}
-            className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-[#8C8C8C]"
-          >
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path d="M12 5v14M5 12h14" />
-            </svg>
-          </button>
           <textarea
             ref={inputRef}
             value={input}
@@ -425,11 +431,6 @@ export default function ChatPage() {
           </button>
         </div>
       </div>
-      {toast && (
-        <div className="animate-fade-in fixed bottom-24 left-1/2 z-50 -translate-x-1/2 rounded-full bg-gray-800 px-4 py-2 text-sm text-white shadow-lg">
-          {toast}
-        </div>
-      )}
     </>
   );
 

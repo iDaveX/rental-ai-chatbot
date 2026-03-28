@@ -7,7 +7,7 @@ export type Stage =
   | "appointment"
   | "closed";
 
-export type TonePreset = "friendly" | "formal" | "warm";
+export type TonePreset = "friendly" | "formal" | "warm" | "business";
 
 export type Sentiment = "positive" | "neutral" | "concerned" | "negative";
 

@@ -1,7 +1,21 @@
 {
   "name": "domclick-agent",
   "version": "0.1.0",
+  "description": "AI-агент для переписки с арендаторами по объявлениям о долгосрочной аренде: чат, логика диалога и админка с метриками.",
   "private": true,
+  "homepage": "https://domclick-agent.vercel.app",
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:iDaveX/rental-ai-chatbot.git"
+  },
+  "keywords": [
+    "nextjs",
+    "anthropic",
+    "supabase",
+    "ai-agent",
+    "rental",
+    "domclick"
+  ],
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -9,6 +23,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.80.0",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.49.1",
     "class-variance-authority": "^0.7.1",

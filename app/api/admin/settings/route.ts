@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 function getSupabase() {
   return createClient(
@@ -17,8 +18,22 @@ export async function GET() {
     .select("agent_name, tone_preset")
     .single();
 
-  if (error) return NextResponse.json({ agent_name: "Марина", tone_preset: "friendly" });
-  return NextResponse.json(data);
+  if (error) {
+    return NextResponse.json(
+      { agent_name: "Марина", tone_preset: "friendly" },
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
+        },
+      },
+    );
+  }
+
+  return NextResponse.json(data, {
+    headers: {
+      "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
+    },
+  });
 }
 
 export async function POST(req: NextRequest) {

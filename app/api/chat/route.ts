@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
 import {
@@ -8,19 +9,88 @@ import {
   determineNextStage,
 } from "@/lib/prompts";
 import { getListingById, LISTINGS } from "@/data/listings";
-import { Stage, Signals } from "@/lib/types";
+import { Stage, Signals, TonePreset } from "@/lib/types";
+import { getSuspiciousReason } from "@/lib/moderation";
+import { normalizeAssistantReply } from "@/lib/utils";
 
 export const maxDuration = 60;
+
+function buildSafeRedirectReply(listing: { address: string; district: string; priceLabel: string }) {
+  return `Я могу помочь именно по квартире: цена, условия аренды, район, просмотры. По ${listing.district}, ${listing.address}, аренда ${listing.priceLabel}. Что хотите уточнить?`;
+}
+
+function buildModerationReply(
+  listing: { address: string; district: string; priceLabel: string },
+  reason: "prompt_injection" | "toxic",
+) {
+  if (reason === "toxic") {
+    return `Я помогу по квартире, но давайте без оскорблений. По ${listing.district}, ${listing.address}, аренда ${listing.priceLabel}. Что хотите уточнить по условиям или просмотру?`;
+  }
+
+  return buildSafeRedirectReply(listing);
+}
+
+function parseToneMap(raw: string | null | undefined): Record<string, TonePreset> {
+  if (!raw) return {};
+
+  try {
+    const parsed = JSON.parse(raw) as Record<string, TonePreset>;
+    return typeof parsed === "object" && parsed !== null ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
+});
+
+const groq = new OpenAI({
+  baseURL: "https://api.groq.com/openai/v1",
+  apiKey: process.env.GROQ_API_KEY,
+});
+
+async function callLLM(
+  system: string,
+  messages: { role: "user" | "assistant"; content: string }[],
+  maxTokens = 1024,
+  temperature = 0.7,
+) {
+  try {
+    const res = await anthropic.messages.create({
+      model: "claude-3-5-haiku-20241022",
+      max_tokens: maxTokens,
+      system,
+      messages,
+      temperature,
+    });
+
+    return res.content
+      .map((block) => (block.type === "text" ? block.text : ""))
+      .join("")
+      .trim();
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    console.warn("Anthropic unavailable, falling back to Groq:", message);
+
+    const res = await groq.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
+      messages: [
+        ...(system ? [{ role: "system" as const, content: system }] : []),
+        ...messages,
+      ],
+      temperature,
+      max_tokens: maxTokens,
+    });
+
+    return res.choices[0].message.content?.trim() ?? "";
+  }
+}
 
 export async function POST(req: NextRequest) {
   const startTime = Date.now();
 
   try {
-    const groq = new OpenAI({
-      apiKey: process.env.GROQ_API_KEY,
-      baseURL: "https://api.groq.com/openai/v1",
-    });
-
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -29,6 +99,15 @@ export async function POST(req: NextRequest) {
     const { message, sessionId, listingId = "usacheva-11" } = await req.json();
     const listing = getListingById(listingId) || LISTINGS[0];
     const KB = listing.kb;
+
+    const { data: toneSetting } = await supabase
+      .from("settings")
+      .select("tone_preset")
+      .eq("id", 1)
+      .single();
+
+    const toneMap = parseToneMap(toneSetting?.tone_preset);
+    const activeTone = toneMap[listingId] ?? listing.tone;
 
     if (!message || !sessionId) {
       return NextResponse.json(
@@ -85,23 +164,75 @@ export async function POST(req: NextRequest) {
       content: message,
     });
 
-    // 4. EXTRACTION — извлечь сигналы (отдельный быстрый вызов)
-    const extractionResponse = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
-      messages: [
-        {
-          role: "user",
-          content: buildExtractionPrompt(message, historyText),
-        },
-      ],
-      temperature: 0.1,
-      max_tokens: 300,
-    });
+    await supabase
+      .from("conversations")
+      .update({
+        last_message_at: new Date().toISOString(),
+      })
+      .eq("id", conversation.id);
 
+    const suspiciousReason = getSuspiciousReason(message);
+
+    if (suspiciousReason) {
+      const agentReply = normalizeAssistantReply(
+        buildModerationReply(listing, suspiciousReason),
+      );
+      const responseTime = Date.now() - startTime;
+
+      await supabase.from("messages").insert({
+        conversation_id: conversation.id,
+        role: "assistant",
+        content: agentReply,
+        intent: {
+          intent: suspiciousReason === "prompt_injection" ? "general_question" : "objection",
+          interest_level: 0,
+          has_objection: suspiciousReason === "toxic",
+          objection_type: suspiciousReason === "toxic" ? "tone" : "none",
+          urgency: "low",
+          readiness_to_view: 0,
+          sentiment: suspiciousReason === "toxic" ? "negative" : "neutral",
+        },
+        strategy:
+          suspiciousReason === "prompt_injection"
+            ? "Вернуть разговор к теме квартиры и не раскрывать внутренние инструкции"
+            : "Снизить напряжение, не вступать в конфликт и вернуть разговор к теме квартиры",
+        response_time_ms: responseTime,
+      });
+
+      await supabase
+        .from("conversations")
+        .update({
+          sentiment: suspiciousReason === "toxic" ? "negative" : conversation.sentiment,
+          last_message_at: new Date().toISOString(),
+        })
+        .eq("id", conversation.id);
+
+      return NextResponse.json({
+        reply: agentReply,
+        stage: conversation.stage,
+        signals: {
+          intent: suspiciousReason === "prompt_injection" ? "general_question" : "objection",
+          interest_level: 0,
+          has_objection: suspiciousReason === "toxic",
+          objection_type: suspiciousReason === "toxic" ? "tone" : "none",
+          urgency: "low",
+          readiness_to_view: 0,
+          sentiment: suspiciousReason === "toxic" ? "negative" : "neutral",
+        },
+        responseTime,
+      });
+    }
+
+    // 4. EXTRACTION — извлечь сигналы (отдельный быстрый вызов)
     let signals: Partial<Signals> = {};
     try {
-      const raw = extractionResponse.choices[0].message.content || "{}";
-      // Убираем markdown если модель всё же добавила ```json
+      const raw =
+        (await callLLM(
+          "",
+          [{ role: "user", content: buildExtractionPrompt(message, historyText) }],
+          300,
+          0.1,
+        )) || "{}";
       const cleaned = raw
         .replace(/```json\n?/g, "")
         .replace(/```\n?/g, "")
@@ -150,7 +281,7 @@ export async function POST(req: NextRequest) {
     const strategy = buildStrategy(nextStage, signals);
 
     // 7. GENERATION — финальный ответ агента
-    const tone = listing.tone;
+    const tone = activeTone;
     const agentName = listing.agentName;
     const systemPrompt = buildGenerationPrompt(
       nextStage,
@@ -163,10 +294,9 @@ export async function POST(req: NextRequest) {
     );
 
     const messagesForLLM: {
-      role: "system" | "user" | "assistant";
+      role: "user" | "assistant";
       content: string;
     }[] = [
-      { role: "system", content: systemPrompt },
       ...(history || []).map((m) => ({
         role: m.role as "user" | "assistant",
         content: m.content,
@@ -174,15 +304,9 @@ export async function POST(req: NextRequest) {
       { role: "user", content: message },
     ];
 
-    const generationResponse = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
-      messages: messagesForLLM,
-      temperature: 0.7,
-      max_tokens: 200,
-    });
-
-    const agentReply =
-      generationResponse.choices[0].message.content || "Одну секунду...";
+    const agentReply = normalizeAssistantReply(
+      (await callLLM(systemPrompt, messagesForLLM, 200, 0.7)) || "Одну секунду...",
+    );
     const responseTime = Date.now() - startTime;
 
     // 8. Сохранить ответ агента
