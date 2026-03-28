@@ -195,7 +195,6 @@ export default function AdminPage() {
 
     if (pin === ADMIN_PIN) {
       setIsUnlocked(true);
-      window.sessionStorage.setItem("admin-unlocked", "1");
       return;
     }
 
@@ -265,10 +264,6 @@ export default function AdminPage() {
       setSummaryLoading((prev) => ({ ...prev, [conversationId]: false }));
     }
   }, [summaryLoading]);
-
-  useEffect(() => {
-    setIsUnlocked(window.sessionStorage.getItem("admin-unlocked") === "1");
-  }, []);
 
   useEffect(() => {
     if (!isUnlocked) return;
