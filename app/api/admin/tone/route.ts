@@ -3,10 +3,12 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+function getSupabaseClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 type ToneValue = "friendly" | "formal" | "warm" | "business";
 
@@ -22,6 +24,7 @@ function parseToneMap(raw: string | null | undefined): Record<string, ToneValue>
 }
 
 export async function POST(req: NextRequest) {
+  const supabase = getSupabaseClient();
   const { slug, tone } = (await req.json()) as { slug?: string; tone?: ToneValue };
 
   if (!slug || !tone) {

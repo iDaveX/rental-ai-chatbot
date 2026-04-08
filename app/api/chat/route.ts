@@ -41,14 +41,18 @@ function parseToneMap(raw: string | null | undefined): Record<string, TonePreset
   }
 }
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+function getAnthropicClient() {
+  return new Anthropic({
+    apiKey: process.env.ANTHROPIC_API_KEY,
+  });
+}
 
-const groq = new OpenAI({
-  baseURL: "https://api.groq.com/openai/v1",
-  apiKey: process.env.GROQ_API_KEY,
-});
+function getGroqClient() {
+  return new OpenAI({
+    baseURL: "https://api.groq.com/openai/v1",
+    apiKey: process.env.GROQ_API_KEY,
+  });
+}
 
 async function callLLM(
   system: string,
@@ -56,6 +60,8 @@ async function callLLM(
   maxTokens = 1024,
   temperature = 0.7,
 ) {
+  const anthropic = getAnthropicClient();
+
   try {
     const res = await anthropic.messages.create({
       model: "claude-3-5-haiku-20241022",
@@ -73,6 +79,7 @@ async function callLLM(
     const message = e instanceof Error ? e.message : String(e);
     console.warn("Anthropic unavailable, falling back to Groq:", message);
 
+    const groq = getGroqClient();
     const res = await groq.chat.completions.create({
       model: "llama-3.3-70b-versatile",
       messages: [
