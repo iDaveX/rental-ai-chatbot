@@ -5,7 +5,7 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin", "cyrillic"] });
 
 export const metadata: Metadata = {
-  title: "Домклик Агент",
+  title: "RentFlow",
   description: "AI-ассистент для автоматизации общения с арендаторами",
 };
 

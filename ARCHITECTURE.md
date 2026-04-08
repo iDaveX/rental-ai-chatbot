@@ -4,7 +4,7 @@
 - Next.js 14 App Router: один стек для UI, API routes и deploy на Vercel без отдельного backend-сервиса.
 - Supabase (PostgreSQL + Realtime-ready infra): простая managed БД для хранения диалогов, сообщений, настроек и метрик без отдельной DevOps-настройки.
 - Groq API (`llama-3.3-70b-versatile`) через OpenAI SDK: быстрые ответы и совместимый клиент; OpenAI SDK использован как стабильный интерфейс к Groq endpoint.
-- Tailwind CSS: быстрый UI polish и точный контроль над avito-like интерфейсом без отдельной дизайн-системы.
+- Tailwind CSS: быстрый UI polish и точный контроль над интерфейсом в стилистике крупного классифайда без отдельной дизайн-системы.
 
 ## Project Structure
 - `app/page.tsx`: главная страница-каталог с карточками объявлений.
@@ -85,4 +85,4 @@
 - Client-side chat shell + server-side orchestration: UI остаётся лёгким, а логика диалога централизована в API.
 - Multi-listing через query param `listing`: один чатовый surface обслуживает разные объекты без дублирования кода.
 - AI summary on demand: саммари не сохраняется в БД, а генерируется только по запросу админки, что упрощает схему.
-- Avito-like UI without fake flows: интерфейс выглядит знакомо пользователю Авито, но не притворяется функционалом, которого нет.
+- Classified-like UI without fake flows: интерфейс выглядит знакомо пользователю маркетплейса объявлений, но не притворяется функционалом, которого нет.

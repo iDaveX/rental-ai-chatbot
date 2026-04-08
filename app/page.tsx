@@ -42,7 +42,7 @@ export default function Home() {
     <div className="min-h-[100dvh] bg-[#EFEFF4] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
       <header className="sticky top-0 z-20 h-14 border-b border-[#E5E5E5] bg-white px-4">
         <div className="mx-auto flex h-full max-w-7xl items-center justify-between">
-          <div aria-hidden="true" className="w-[72px]" />
+          <span className="text-2xl font-extrabold text-[#00AAFF]">RentFlow</span>
           <Link
             href="/admin"
             className="rounded-full border border-[#0066FF] px-4 py-1.5 text-sm text-[#0066FF] transition-colors hover:bg-[#0066FF] hover:text-white"

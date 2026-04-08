@@ -1,5 +1,5 @@
 {
-  "name": "domclick-agent",
+  "name": "rentflow",
   "version": "0.1.0",
   "description": "AI-агент для переписки с арендаторами по объявлениям о долгосрочной аренде: чат, логика диалога и админка с метриками.",
   "private": true,
@@ -14,7 +14,7 @@
     "supabase",
     "ai-agent",
     "rental",
-    "domclick"
+    "rentflow"
   ],
   "scripts": {
     "dev": "next dev",
